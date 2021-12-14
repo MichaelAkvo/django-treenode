@@ -5,6 +5,7 @@ from django.test import TransactionTestCase
 from django.utils.encoding import force_text
 
 from treenode.cache import clear_cache
+from treenode.signals import no_signals
 from treenode.utils import join_pks
 from .models import Category, CategoryStr, CategoryUUID, CategoryUUIDStr
 
@@ -803,60 +804,6 @@ class TreeNodeModelsTestCaseBase:
         self.assertFalse(b.is_ancestor_of(a))
         self.assertFalse(c.is_ancestor_of(a))
 
-    def test_is_first_child(self):
-        self.__create_cat_tree()
-        a = self.__get_cat(name='a')
-        b = self.__get_cat(name='b')
-        c = self.__get_cat(name='c')
-        d = self.__get_cat(name='d')
-        e = self.__get_cat(name='e')
-        f = self.__get_cat(name='f')
-        self.assertTrue(a.is_first_child())
-        self.assertFalse(b.is_first_child())
-        self.assertFalse(c.is_first_child())
-        self.assertFalse(d.is_first_child())
-        self.assertFalse(e.is_first_child())
-        self.assertFalse(f.is_first_child())
-        aa = self.__get_cat(name='aa')
-        ab = self.__get_cat(name='ab')
-        ac = self.__get_cat(name='ac')
-        ad = self.__get_cat(name='ad')
-        ae = self.__get_cat(name='ae')
-        af = self.__get_cat(name='af')
-        self.assertTrue(aa.is_first_child())
-        self.assertFalse(ab.is_first_child())
-        self.assertFalse(ac.is_first_child())
-        self.assertFalse(ad.is_first_child())
-        self.assertFalse(ae.is_first_child())
-        self.assertFalse(af.is_first_child())
-
-    def test_is_last_child(self):
-        self.__create_cat_tree()
-        a = self.__get_cat(name='a')
-        b = self.__get_cat(name='b')
-        c = self.__get_cat(name='c')
-        d = self.__get_cat(name='d')
-        e = self.__get_cat(name='e')
-        f = self.__get_cat(name='f')
-        self.assertFalse(a.is_last_child())
-        self.assertFalse(b.is_last_child())
-        self.assertFalse(c.is_last_child())
-        self.assertFalse(d.is_last_child())
-        self.assertFalse(e.is_last_child())
-        self.assertTrue(f.is_last_child())
-        aa = self.__get_cat(name='aa')
-        ab = self.__get_cat(name='ab')
-        ac = self.__get_cat(name='ac')
-        ad = self.__get_cat(name='ad')
-        ae = self.__get_cat(name='ae')
-        af = self.__get_cat(name='af')
-        self.assertFalse(aa.is_last_child())
-        self.assertFalse(ab.is_last_child())
-        self.assertFalse(ac.is_last_child())
-        self.assertFalse(ad.is_last_child())
-        self.assertFalse(ae.is_last_child())
-        self.assertTrue(af.is_last_child())
-
     def test_is_leaf(self):
         self.__create_cat_tree()
         a = self.__get_cat(name='a')
@@ -1232,3 +1179,29 @@ class TreeNodeModelsIdStrTestCase(TreeNodeModelsTestCaseBase, TransactionTestCas
 
 class TreeNodeModelsUUIDStrTestCase(TreeNodeModelsTestCaseBase, TransactionTestCase):
     _category_model = CategoryUUIDStr
+
+
+class TreeNodeModelSiblings(TransactionTestCase):
+
+    def test_roots_arent_siblings(self):
+        settings.DEBUG = True
+        count = 100
+        with no_signals():
+            # Can't use bulk_create because it doesn't return pks
+            categories = list(
+                Category.objects.create(name=str(i))
+                for i in range(count)
+            )
+            child_categories = list(
+                Category.objects.create(name=category.name + " child")
+                for category in categories
+            )
+
+        for parent, child in zip(categories, child_categories):
+            # try:
+            child.set_parent(parent)
+            # except django.db.utils.IntegrityError as e:
+            #     print(e)
+
+        tree = Category.get_tree()
+        self.assertEqual(len(tree), 100)
